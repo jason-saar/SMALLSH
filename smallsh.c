@@ -10,6 +10,10 @@
 #include <signal.h>
 #include <fcntl.h>
 
+#define HISTORY_SIZE 100
+
+char* history[HISTORY_SIZE];
+int historyCount;
 
 /**
  * Foreground Only Flag
@@ -40,6 +44,9 @@ void executeCommand(struct command* cmd);
 void cleanBackground(pid_t* bgPids, int pidCount);
 void childReaper(pid_t* bgPids, int* pidCount);
 void handle_SIGTSTP(int signo);
+void addHistory(char* cmdline);
+void printHistory();
+void freeHistory();
 
 int main(void){
 	/**
@@ -100,6 +107,8 @@ int main(void){
 			continue;
 		}
 
+    addHistory(cmdline);
+
 		// Allocate mem for command and parse input
 		struct command* cmd = calloc(1, sizeof(struct command));
 		parseCommand(cmdline, cmd);
@@ -120,7 +129,9 @@ int main(void){
 			changeDir(cmd);
 		} else if(strcmp(cmd->args[0], "status") == 0){
 			printStatus(childStatus);
-		} else{
+		} else if(strcmp(cmd->args[0], "history") == 0){
+      printHistory();
+    }else{
 			pid_t childPid = fork();
 
 			if(childPid == -1){
@@ -165,6 +176,7 @@ int main(void){
 	// Free background PID array memory before exiting
 	// TODO: Possibly killing reused PIDS? Implement handle for that
 	cleanBackground(bgPids, pidCount);
+  freeHistory();
 	return 0;
 }
 
@@ -411,4 +423,30 @@ void handle_SIGTSTP(int signo){
 		message = "\nEntering foreground-only mode (& is now ignored)\n: ";
 	}
 	write(STDOUT_FILENO, message, strlen(message));
+}
+
+void addHistory(char* cmdline){
+  // Verify history array has room
+  if(historyCount < HISTORY_SIZE){
+    history[historyCount++] = strdup(cmdline);
+  } else {
+    // Shift everything left and free oldest command
+    free(history[0]);
+    for(int i = 0; i < HISTORY_SIZE - 1; i++){
+      history[i] = history[i + 1];
+    }
+    history[HISTORY_SIZE - 1] = strdup(cmdline);
+  }
+}
+
+void printHistory(){
+  for(int i = 0; i < historyCount; i++){
+    printf("%d %s\n", i + 1, history[i]);
+  }
+}
+
+void freeHistory(){
+  for(int i = 0; i < historyCount; i++){
+    free(history[i]);
+  }
 }
